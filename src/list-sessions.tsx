@@ -12,6 +12,32 @@ import {
 import { buildCommand, launchInteractive } from "./lib/platform";
 import { loadSessions, Session } from "./lib/sessions";
 
+/** One-line blockquote (callers pass already-clipped, single-line text). */
+const quote = (s: string) => `> ${s}`;
+
+/** A recall-first detail: what the session was about, where it ended, then the command. */
+function detailMarkdown(s: Session, resumeCmd: string): string {
+  const parts = [`### ${s.title}`];
+  if (s.firstPrompt)
+    parts.push(`**First prompt**\n\n${quote(clip(s.firstPrompt, 300))}`);
+  if (s.lastPrompt && s.lastPrompt !== s.firstPrompt)
+    parts.push(`**Latest prompt**\n\n${quote(clip(s.lastPrompt, 300))}`);
+  if (s.lastReply)
+    parts.push(`**Latest reply**\n\n${quote(clip(s.lastReply, 400))}`);
+  parts.push("---");
+  parts.push(
+    `**Directory** \`${s.cwd}\`\n\n**Turns** ${s.turns} • **Session** \`${s.id}\``,
+  );
+  parts.push(`**Resume**\n\n\`\`\`bash\n${resumeCmd}\n\`\`\``);
+  return parts.join("\n\n");
+}
+
+/** Collapse whitespace and truncate with an ellipsis. */
+function clip(s: string, n: number): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, n - 1) + "…" : t;
+}
+
 /**
  * List Session History (merges the old Search Sessions and Resume Last).
  * Sorted newest first, so the top row is the most recent session; pressing Enter
@@ -22,7 +48,7 @@ export default function ListSessions() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadSessions()
+    loadSessions(200, { detail: true })
       .then(setItems)
       .finally(() => setLoading(false));
   }, []);
@@ -54,14 +80,12 @@ export default function ListSessions() {
         return (
           <List.Item
             key={s.file}
-            title={s.summary}
+            title={s.title}
             subtitle={s.cwd}
-            keywords={[s.id, s.cwd]}
+            keywords={[s.id, s.cwd, s.firstPrompt, s.lastPrompt]}
             accessories={[{ date: new Date(s.mtime) }]}
             detail={
-              <List.Item.Detail
-                markdown={`### Resume command\n\n\`\`\`bash\n${resumeCmd}\n\`\`\`\n\n**Session ID**: \`${s.id}\`\n\n**Directory**: \`${s.cwd}\``}
-              />
+              <List.Item.Detail markdown={detailMarkdown(s, resumeCmd)} />
             }
             actions={
               <ActionPanel>
