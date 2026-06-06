@@ -60,6 +60,18 @@
       "type": "textfield",
       "required": false,
       "default": "Ubuntu"
+    },
+    {
+      "name": "winShell",
+      "title": "Windows Shell",
+      "description": "Windows only. Shell used to launch Windows-native (non-WSL) sessions.",
+      "type": "dropdown",
+      "required": false,
+      "default": "pwsh",
+      "data": [
+        { "title": "PowerShell 7 (pwsh)", "value": "pwsh" },
+        { "title": "Windows PowerShell (powershell)", "value": "powershell" }
+      ]
     }
   ],
   "dependencies": {

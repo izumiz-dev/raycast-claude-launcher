@@ -15,6 +15,10 @@ import { loadSessions, Session } from "./lib/sessions";
 /** One-line blockquote (callers pass already-clipped, single-line text). */
 const quote = (s: string) => `> ${s}`;
 
+/** Human label for a session's environment. */
+const backendLabel = (b: Session["backend"]) =>
+  b === "wsl" ? "WSL" : "Windows/native";
+
 /** A recall-first detail: what the session was about, where it ended, then the command. */
 function detailMarkdown(s: Session, resumeCmd: string): string {
   const parts = [`### ${s.title}`];
@@ -26,7 +30,7 @@ function detailMarkdown(s: Session, resumeCmd: string): string {
     parts.push(`**Latest reply**\n\n${quote(clip(s.lastReply, 400))}`);
   parts.push("---");
   parts.push(
-    `**Directory** \`${s.cwd}\`\n\n**Turns** ${s.turns} • **Session** \`${s.id}\``,
+    `**Directory** \`${s.cwd}\`\n\n**Environment** ${backendLabel(s.backend)} • **Turns** ${s.turns} • **Session** \`${s.id}\``,
   );
   parts.push(`**Resume**\n\n\`\`\`bash\n${resumeCmd}\n\`\`\``);
   return parts.join("\n\n");
@@ -56,10 +60,10 @@ export default function ListSessions() {
   async function resume(s: Session) {
     try {
       await closeMainWindow();
-      await launchInteractive(s.cwd, ["-r", s.id]); // primary action: jump into the session
+      await launchInteractive(s.cwd, ["-r", s.id], s.backend); // primary action: jump into the session
     } catch {
       // fall back to copying where we can't launch
-      const cmd = buildCommand(["-r", s.id], s.cwd);
+      const cmd = buildCommand(["-r", s.id], s.cwd, s.backend);
       await Clipboard.copy(cmd);
       await showToast({
         style: Toast.Style.Failure,
@@ -69,6 +73,10 @@ export default function ListSessions() {
     }
   }
 
+  // Only tag the environment when the list actually mixes backends (e.g. a Windows
+  // user with both PowerShell and WSL sessions); otherwise it's just noise.
+  const mixed = new Set(items.map((s) => s.backend)).size > 1;
+
   return (
     <List
       isLoading={loading}
@@ -76,14 +84,17 @@ export default function ListSessions() {
       isShowingDetail
     >
       {items.map((s) => {
-        const resumeCmd = buildCommand(["-r", s.id], s.cwd);
+        const resumeCmd = buildCommand(["-r", s.id], s.cwd, s.backend);
         return (
           <List.Item
             key={s.file}
             title={s.title}
             subtitle={s.cwd}
             keywords={[s.id, s.cwd, s.firstPrompt, s.lastPrompt]}
-            accessories={[{ date: new Date(s.mtime) }]}
+            accessories={[
+              ...(mixed ? [{ tag: backendLabel(s.backend) }] : []),
+              { date: new Date(s.mtime) },
+            ]}
             detail={
               <List.Item.Detail markdown={detailMarkdown(s, resumeCmd)} />
             }

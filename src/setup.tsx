@@ -1,11 +1,12 @@
 /**
  * Setup / status check.
- * Shows the resolved configuration (the .claude home, the claude binary, the WSL
- * distro) and validates it, so a freshly installed extension can be verified in
- * one place. Read-only and free — it never calls claude with -p.
- * The primary action opens the extension preferences so paths can be overridden.
+ * Shows the resolved configuration (which .claude stores are read, the claude binary, the
+ * WSL distro) and validates it, so a freshly installed extension can be verified in one
+ * place. Read-only and free — it never calls claude with -p.
+ * The primary action opens the extension preferences so things can be overridden.
  */
 import { useEffect, useState } from "react";
+import * as path from "path";
 import {
   Action,
   ActionPanel,
@@ -15,9 +16,10 @@ import {
   openExtensionPreferences,
 } from "@raycast/api";
 import {
+  Backend,
   claudeBinFound,
+  claudeStores,
   isWindows,
-  projectsDir,
   readDirSafe,
   resolvedConfig,
   wslDistroExists,
@@ -32,6 +34,8 @@ interface Check {
   status: Status;
   hint: string;
 }
+
+const backendLabel = (b: Backend) => (b === "wsl" ? "WSL" : "Windows/native");
 
 function statusIcon(s: Status) {
   if (s === "ok") return { source: Icon.CheckCircle, tintColor: Color.Green };
@@ -65,32 +69,38 @@ export default function Setup() {
         status: distroOk ? "ok" : "warn",
         hint: distroOk
           ? "Distro found."
-          : "This distro was not found. Set the correct name in preferences (list them with: wsl -l -q).",
+          : "This distro was not found. If you don't use WSL you can ignore it; otherwise set the correct name in preferences (list them with: wsl -l -q).",
       });
     }
 
-    const projects = await readDirSafe(await projectsDir());
-    out.push({
-      id: "home",
-      title: "Claude Home",
-      value: cfg.claudeHome,
-      status: projects.length > 0 ? "ok" : "warn",
-      hint:
-        projects.length > 0
-          ? `Readable — ${projects.length} project folder(s) here.`
-          : "No session history found here. If this path is wrong, set Claude Home in preferences (leave empty to auto-detect).",
-    });
+    const stores = await claudeStores();
+    for (const store of stores) {
+      const projects = await readDirSafe(path.join(store.root, "projects"));
+      out.push({
+        id: `store-${store.backend}`,
+        title: `${backendLabel(store.backend)} store`,
+        value: store.root,
+        status: projects.length > 0 ? "ok" : "warn",
+        hint:
+          projects.length > 0
+            ? `Readable — ${projects.length} project folder(s).`
+            : "No session history found here.",
+      });
+    }
 
-    const binOk = await claudeBinFound();
-    out.push({
-      id: "bin",
-      title: "Claude Binary",
-      value: cfg.claudeBin,
-      status: binOk ? "ok" : "warn",
-      hint: binOk
-        ? "Found on PATH in your login shell."
-        : "Not found in your login shell. Install Claude Code, or set an absolute path in preferences.",
-    });
+    // One binary check per environment actually in use.
+    for (const backend of [...new Set(stores.map((s) => s.backend))]) {
+      const ok = await claudeBinFound(backend);
+      out.push({
+        id: `bin-${backend}`,
+        title: `Claude Binary (${backendLabel(backend)})`,
+        value: cfg.claudeBin,
+        status: ok ? "ok" : "warn",
+        hint: ok
+          ? "Found on PATH in the launch shell."
+          : "Not found in the launch shell. Install Claude Code there, or set an absolute path in preferences.",
+      });
+    }
 
     setChecks(out);
     setLoading(false);

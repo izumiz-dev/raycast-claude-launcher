@@ -1,11 +1,12 @@
 import { promises as fs } from "fs";
 import * as path from "path";
-import { projectsDir, readDirSafe } from "./platform";
+import { Backend, claudeStores, readDirSafe } from "./platform";
 
 export interface Session {
   id: string; // file name (= the session id passed to --resume)
   file: string;
   cwd: string; // working directory claude ran in (we cd here before launching)
+  backend: Backend; // which environment it belongs to (decides how we launch it)
   title: string; // short label: Claude's ai-title, else the first prompt, else a placeholder
   firstPrompt: string; // the prompt that started the session (recall: "what was this about")
   lastPrompt: string; // the most recent user prompt (recall: "where did I leave off")
@@ -117,33 +118,34 @@ export async function loadSessions(
   opts: { detail?: boolean } = {},
 ): Promise<Session[]> {
   const detail = opts.detail ?? false;
-  const root = await projectsDir();
-  const projects = await readDirSafe(root);
   const out: Session[] = [];
 
-  for (const proj of projects) {
-    const dir = path.join(root, proj);
-    const files = await readDirSafe(dir);
-    for (const f of files) {
-      if (!f.endsWith(".jsonl")) continue;
-      const file = path.join(dir, f);
-      try {
-        const stat = await fs.stat(file);
-        const raw = await fs.readFile(file, "utf8");
-        const e = extract(raw, detail);
-        out.push({
-          id: path.basename(f, ".jsonl"),
-          file,
-          cwd: e.cwd || decodeProjectDir(proj),
-          title: e.aiTitle || clip(e.firstPrompt, 80) || "(untitled session)",
-          firstPrompt: e.firstPrompt,
-          lastPrompt: e.lastPrompt,
-          lastReply: e.lastReply,
-          turns: e.turns,
-          mtime: stat.mtimeMs,
-        });
-      } catch {
-        // skip corrupt or unreadable files
+  for (const store of await claudeStores()) {
+    const root = path.join(store.root, "projects");
+    for (const proj of await readDirSafe(root)) {
+      const dir = path.join(root, proj);
+      for (const f of await readDirSafe(dir)) {
+        if (!f.endsWith(".jsonl")) continue;
+        const file = path.join(dir, f);
+        try {
+          const stat = await fs.stat(file);
+          const raw = await fs.readFile(file, "utf8");
+          const e = extract(raw, detail);
+          out.push({
+            id: path.basename(f, ".jsonl"),
+            file,
+            cwd: e.cwd || decodeProjectDir(proj, store.backend),
+            backend: store.backend,
+            title: e.aiTitle || clip(e.firstPrompt, 80) || "(untitled session)",
+            firstPrompt: e.firstPrompt,
+            lastPrompt: e.lastPrompt,
+            lastReply: e.lastReply,
+            turns: e.turns,
+            mtime: stat.mtimeMs,
+          });
+        } catch {
+          // skip corrupt or unreadable files
+        }
       }
     }
   }
@@ -151,7 +153,18 @@ export async function loadSessions(
   return out.slice(0, limit);
 }
 
-/** Rough reconstruction from a projects dir name (path separators replaced with -). Unused when a cwd was found. */
-function decodeProjectDir(name: string): string {
+/**
+ * Best-effort reconstruction of a cwd from a projects dir name (only used when the JSONL
+ * had no cwd). The encoding replaces path separators with "-", which is lossy, so this is
+ * approximate — real dashes in a path are indistinguishable from separators.
+ *  - windows: "C--Users-you-dev-x" → "C:\\Users\\you\\dev\\x"
+ *  - native/wsl (POSIX): "-home-you-x" → "/home/you/x"
+ */
+export function decodeProjectDir(name: string, backend: Backend): string {
+  if (backend === "wsl") {
+    return name.startsWith("-") ? name.replace(/-/g, "/") : name;
+  }
+  const win = /^([A-Za-z])--(.*)$/.exec(name);
+  if (win) return `${win[1]}:\\${win[2].replace(/-/g, "\\")}`;
   return name.startsWith("-") ? name.replace(/-/g, "/") : name;
 }

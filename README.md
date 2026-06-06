@@ -9,7 +9,7 @@ your current context, drop straight *into the session*.
 - **The primary action is "launch".** The launcher's job is to take you there. Copy is the fallback for when launching isn't possible.
 - What we launch is **interactive claude (the flat-rate path)**. We never use `-p`, so there is **zero metered billing**.
 - **No extra binaries required** (the `claude` CLI is enough).
-- OS differences are confined to "how the terminal opens" (mac: Terminal via `osascript` / Windows: `wt + wsl`) → **works on both macOS and Windows (WSL)**.
+- OS differences are confined to "how the terminal opens" (mac: Terminal via `osascript` / Windows: `wt + wsl` for WSL sessions, `wt + PowerShell` for Windows-native ones) → **works on macOS and Windows, with both WSL and native PowerShell/cmd sessions**.
 - We only read files under `~/.claude`, so reading is **completely free**.
 
 ## Commands
@@ -21,7 +21,7 @@ All UI text is in English. The command name (the manifest `name`) and what Enter
 | **Resume Claude Code Session** (`list-sessions`) | view | Search history (newest first) → resume the chosen session (`claude -r <id>`) |
 | **Open Claude Code Project** (`open-project`) | view | A few chars of a repo → start claude there (`Start New Session` / `Continue Last Session`) |
 | **Browse Claude Code Skills & Agents** (`skills-agents`) | view | Preview / copy / open files under `~/.claude/skills` and `agents` |
-| **Check Claude Code Setup** (`setup`) | view | Verify the resolved `.claude` path, claude binary, and WSL distro → open preferences to override |
+| **Check Claude Code Setup** (`setup`) | view | Verify the detected `.claude` stores, the claude binary per environment, and the WSL distro → open preferences to override |
 
 > The old `Resume Last` and `Search Sessions` are merged into `list-sessions` (newest first, so the top row is the most recent and pressing Enter to resume it doubles as "resume last"). `CLI Cheatsheet`, the slash-command runner, `Send to Claude Code`, and the usage/quota command were removed.
 > Where launching isn't possible, the command is copied to the clipboard automatically and a Toast tells you.
@@ -72,16 +72,30 @@ npm run dev     # = ray develop. A green icon means dev is running.
 
 ## Settings (⌘,)
 
-| Setting | mac | Windows (WSL) |
+| Setting | mac | Windows |
 |---|---|---|
-| Claude Home | empty (auto `~/.claude`) | empty — the WSL home is queried automatically; set a UNC path only to override, e.g. `\\wsl.localhost\Ubuntu\home\you\.claude` |
+| Claude Home | empty (auto `~/.claude`) | empty — both stores are auto-detected (see below); set a path only to force a single store |
 | claude binary | `claude` | `claude` |
-| WSL distro name | — | e.g. `Ubuntu` |
+| WSL distro name | — | e.g. `Ubuntu` (only if you use WSL) |
+| Windows Shell | — | `pwsh` (default) or `powershell` — used to launch Windows-native sessions |
 
-### Windows (WSL) key points
-- Auth and sessions both live in **`~/.claude` inside WSL**. Run `claude login` inside WSL.
-- Launching writes a temp script (`cd <cwd> && claude ...`, plus `exec <login-shell>` so the window stays open) and runs `wt -w 0 wsl -d <distro> -- <login-shell> -lic "source <script>"` to enter the logged-in session inside WSL (falls back to plain `wsl` if `wt` is unavailable).
-- A session's `cwd` is a WSL Linux path, so it can be `cd`'d into directly.
+### Windows: two backends, auto-detected
+On Windows you may run Claude Code from **WSL** and/or **natively from PowerShell/cmd**, and
+each keeps its own `.claude`. The extension reads **both** and tags each session so it relaunches
+in the right place (none of the paths are hardcoded to a user):
+
+- **WSL sessions.** Store is `~/.claude` inside WSL (the home is queried, not assumed). `cwd` is a
+  Linux path. Launch writes a temp `.sh` and runs `wt -w 0 wsl -d <distro> -- <login-shell> -lic
+  "source <script>"` (falls back to plain `wsl` if `wt` is missing), with `exec <login-shell>` so
+  the window stays open. Run `claude login` inside WSL.
+- **Windows-native sessions.** Store is `C:\Users\<you>\.claude` (via the OS home). `cwd` is a
+  Windows path. Launch writes a temp `.ps1` and runs `wt -w 0 <pwsh|powershell> -NoExit
+  -ExecutionPolicy Bypass -File <script>` (falls back to the shell directly), which `Set-Location`s
+  into the dir and runs `claude`. Run `claude login` in PowerShell.
+
+When the session list mixes both, a small `WSL` / `Windows/native` tag distinguishes them. Use the
+**Check Claude Code Setup** command to see which stores were detected and whether `claude` resolves
+in each environment.
 
 ## Recommended setup
 - **Bind a global hotkey to `list-sessions`** (e.g. ⌥⌘C) → jump back into where you left off from anywhere.

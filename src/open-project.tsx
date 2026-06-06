@@ -11,16 +11,18 @@ import {
   Toast,
 } from "@raycast/api";
 import {
+  Backend,
   buildCommand,
+  claudeStores,
   launchInteractive,
-  projectsDir,
   readDirSafe,
 } from "./lib/platform";
-import { loadSessions } from "./lib/sessions";
+import { decodeProjectDir, loadSessions } from "./lib/sessions";
 
 interface Project {
   cwd: string;
   label: string;
+  backend: Backend;
   lastUsed?: number;
 }
 
@@ -38,14 +40,23 @@ export default function OpenProject() {
           map.set(s.cwd, {
             cwd: s.cwd,
             label: path.basename(s.cwd) || s.cwd,
+            backend: s.backend,
             lastUsed: s.mtime,
           });
         }
       }
-      for (const name of await readDirSafe(await projectsDir())) {
-        const cwd = name.startsWith("-") ? name.replace(/-/g, "/") : name;
-        if (!map.has(cwd))
-          map.set(cwd, { cwd, label: path.basename(cwd) || cwd });
+      // Also surface project folders that have no parsed session yet, per store.
+      for (const store of await claudeStores()) {
+        const dir = path.join(store.root, "projects");
+        for (const name of await readDirSafe(dir)) {
+          const cwd = decodeProjectDir(name, store.backend);
+          if (!map.has(cwd))
+            map.set(cwd, {
+              cwd,
+              label: path.basename(cwd) || cwd,
+              backend: store.backend,
+            });
+        }
       }
       setItems(
         [...map.values()].sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0)),
@@ -57,9 +68,9 @@ export default function OpenProject() {
   async function launch(p: Project, extra: string[]) {
     try {
       await closeMainWindow();
-      await launchInteractive(p.cwd, extra);
+      await launchInteractive(p.cwd, extra, p.backend);
     } catch {
-      const cmd = buildCommand(extra, p.cwd);
+      const cmd = buildCommand(extra, p.cwd, p.backend);
       await Clipboard.copy(cmd);
       await showToast({
         style: Toast.Style.Failure,
@@ -68,6 +79,8 @@ export default function OpenProject() {
       });
     }
   }
+
+  const mixed = new Set(items.map((p) => p.backend)).size > 1;
 
   return (
     <List
@@ -80,7 +93,12 @@ export default function OpenProject() {
           title={p.label}
           subtitle={p.cwd}
           keywords={[p.cwd]}
-          accessories={p.lastUsed ? [{ date: new Date(p.lastUsed) }] : []}
+          accessories={[
+            ...(mixed
+              ? [{ tag: p.backend === "wsl" ? "WSL" : "Windows/native" }]
+              : []),
+            ...(p.lastUsed ? [{ date: new Date(p.lastUsed) }] : []),
+          ]}
           actions={
             <ActionPanel>
               <Action
@@ -95,7 +113,7 @@ export default function OpenProject() {
               />
               <Action.CopyToClipboard
                 title="Copy Launch Command"
-                content={buildCommand([], p.cwd)}
+                content={buildCommand([], p.cwd, p.backend)}
               />
               <Action.CopyToClipboard
                 title="Copy Directory Path"

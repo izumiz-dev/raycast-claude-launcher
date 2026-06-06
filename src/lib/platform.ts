@@ -4,7 +4,8 @@
  * Concept (see docs/raycast-claude-code/07):
  *  - The launcher's job is to take you there. The primary action launches; copy is the fallback.
  *  - We launch interactive claude (the flat-rate path). We never use -p (avoids metered billing).
- *  - OS differences are confined to "how the terminal is opened" (mac: Terminal / Windows: wt + wsl).
+ *  - OS differences are confined to "how the terminal is opened": mac=Terminal, Windows=wt+wsl
+ *    for WSL sessions and wt+PowerShell for Windows-native sessions (see Backend).
  */
 import { execFile } from "child_process";
 import { promises as fs } from "fs";
@@ -16,6 +17,7 @@ interface Prefs {
   claudeHome?: string;
   claudeBin?: string;
   wslDistro?: string;
+  winShell?: string;
 }
 
 export const isWindows = process.platform === "win32";
@@ -23,6 +25,20 @@ export const isMac = process.platform === "darwin";
 
 export function prefs(): Prefs {
   return getPreferenceValues<Prefs>();
+}
+
+/**
+ * Where a session lives and how it must be launched.
+ *  - "native": the .claude under the OS home — launched in the OS-native terminal
+ *    (macOS Terminal, or Windows PowerShell). cwd is an OS-native path.
+ *  - "wsl": a .claude inside a WSL distro (Windows only) — launched via wt + wsl.
+ *    cwd is a Linux path.
+ */
+export type Backend = "native" | "wsl";
+
+export interface Store {
+  backend: Backend;
+  root: string; // absolute path to a .claude directory
 }
 
 let cachedClaudeHome: string | undefined;
@@ -48,10 +64,55 @@ export async function claudeHome(): Promise<string> {
   return path.join(os.homedir(), ".claude");
 }
 
+/**
+ * Every .claude store to read sessions from.
+ *  - mac/Linux: the single native ~/.claude.
+ *  - Windows: the Windows-native store (C:\Users\<you>\.claude, via os.homedir) AND the
+ *    WSL store, whichever actually has a projects/ folder — so claude used from either
+ *    PowerShell/cmd or WSL shows up. None of these paths are hardcoded to a user.
+ * An explicit `claudeHome` preference overrides everything with a single store.
+ */
+export async function claudeStores(): Promise<Store[]> {
+  const override = prefs().claudeHome?.trim();
+  if (override) {
+    // On Windows a UNC path means WSL; anything else (incl. mac/Linux) is native.
+    const backend: Backend =
+      isWindows && /^\\\\/.test(override) ? "wsl" : "native";
+    return [{ backend, root: override }];
+  }
+  if (!isWindows) {
+    return [{ backend: "native", root: path.join(os.homedir(), ".claude") }];
+  }
+  const stores: Store[] = [];
+  const nativeRoot = path.join(os.homedir(), ".claude");
+  if (await hasProjects(nativeRoot))
+    stores.push({ backend: "native", root: nativeRoot });
+  try {
+    const wslRoot = await claudeHome();
+    if (await hasProjects(wslRoot))
+      stores.push({ backend: "wsl", root: wslRoot });
+  } catch {
+    // ignore — WSL may be absent
+  }
+  // Never return empty: fall back to the resolved WSL home so the UI has something.
+  if (stores.length === 0)
+    stores.push({ backend: "wsl", root: await claudeHome() });
+  return stores;
+}
+
+async function hasProjects(root: string): Promise<boolean> {
+  return (await readDirSafe(path.join(root, "projects"))).length > 0;
+}
+
+/** The store the global (non-session) views read: skills/agents and the Setup defaults. */
+async function primaryRoot(): Promise<string> {
+  return (await claudeStores())[0].root;
+}
+
 export const projectsDir = async () =>
-  path.join(await claudeHome(), "projects");
-export const skillsDir = async () => path.join(await claudeHome(), "skills");
-export const agentsDir = async () => path.join(await claudeHome(), "agents");
+  path.join(await primaryRoot(), "projects");
+export const skillsDir = async () => path.join(await primaryRoot(), "skills");
+export const agentsDir = async () => path.join(await primaryRoot(), "agents");
 
 export const claudeBin = () => prefs().claudeBin?.trim() || "claude";
 
@@ -59,9 +120,27 @@ export function shArg(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-/** For the copy fallback. `cd <cwd> && claude <extra...>` */
-export function buildCommand(extra: string[], cwd?: string): string {
-  const body = `${claudeBin()}${extra.length ? " " + extra.map(shArg).join(" ") : ""}`;
+/** PowerShell single-quoted literal: embedded single quotes are doubled. */
+export function psArg(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+/**
+ * For the copy fallback: a command the user can paste into the right shell.
+ *  - native on Windows → PowerShell: `Set-Location -LiteralPath '<cwd>'; & claude <extra...>`
+ *  - otherwise (wsl / mac / Linux) → POSIX: `cd '<cwd>' && claude <extra...>`
+ */
+export function buildCommand(
+  extra: string[],
+  cwd?: string,
+  backend: Backend = "native",
+): string {
+  const bin = claudeBin();
+  if (isWindows && backend === "native") {
+    const body = `& ${psArg(bin)}${extra.length ? " " + extra.map(psArg).join(" ") : ""}`;
+    return cwd ? `Set-Location -LiteralPath ${psArg(cwd)}; ${body}` : body;
+  }
+  const body = `${bin}${extra.length ? " " + extra.map(shArg).join(" ") : ""}`;
   return cwd ? `cd ${shArg(cwd)} && ${body}` : body;
 }
 
@@ -95,9 +174,21 @@ export async function resolvedConfig(): Promise<{
  * launchInteractive() runs `claude` directly, never `command -v` (e.g. fish doesn't
  * support `command -v` the POSIX way, so it may report not-found even when claude works).
  */
-export async function claudeBinFound(): Promise<boolean> {
-  const cmd = `command -v ${shArg(claudeBin())}`;
+export async function claudeBinFound(
+  backend: Backend = "native",
+): Promise<boolean> {
   try {
+    if (isWindows && backend === "native") {
+      // Refresh PATH/PATHEXT (a GUI-spawned shell inherits a broken env), then resolve
+      // via Get-Command (honours PATH and absolute paths alike).
+      const out = await runCapture(winShell(), [
+        "-NoProfile",
+        "-Command",
+        `${PS_REFRESH_ENV}; if (Get-Command ${psArg(claudeBin())} -ErrorAction SilentlyContinue) { 'ok' }`,
+      ]);
+      return out.includes("ok");
+    }
+    const cmd = `command -v ${shArg(claudeBin())}`;
     if (isWindows) {
       const distro = prefs().wslDistro?.trim() || "Ubuntu";
       const shell = await wslLoginShell(distro);
@@ -153,61 +244,133 @@ function run(file: string, args: string[]): Promise<void> {
 /**
  * Actually launch an interactive claude session (the primary action).
  * Throws on failure, so the caller can fall back to copying.
- * @param cwd   launch directory (the cwd from the session JSONL; mac=native / Windows=a WSL Linux path)
- * @param extra args for claude (e.g. ["-r", "<id>"] / ["--continue"] / ['"prompt"'])
+ * @param cwd     launch directory (the cwd recorded in the session JSONL)
+ * @param extra   args for claude (e.g. ["-r", "<id>"] / ["--continue"])
+ * @param backend which environment the session belongs to (decides the terminal/shell)
  */
 export async function launchInteractive(
   cwd: string | undefined,
   extra: string[] = [],
+  backend: Backend = "native",
 ): Promise<void> {
+  if (isWindows && backend === "wsl") return launchWsl(cwd, extra);
+  if (isWindows) return launchWindowsNative(cwd, extra);
+  return launchMac(cwd, extra);
+}
+
+/** Windows + WSL: open the WSL login shell in a Windows Terminal tab. */
+async function launchWsl(
+  cwd: string | undefined,
+  extra: string[],
+): Promise<void> {
+  const distro = prefs().wslDistro?.trim() || "Ubuntu";
+  // Open in the user's login shell (zsh/bash/fish/etc). Tools like node/npx are
+  // enabled via mise in that shell's rc (.zshrc etc), so hardcoding bash would
+  // leave MCP's npx and friends missing. Using the login shell reproduces "the
+  // same environment as the user's everyday terminal".
+  const shell = await wslLoginShell(distro);
   const inner = `${claudeBin()}${extra.length ? " " + extra.map(shArg).join(" ") : ""}`;
   // cd to cwd → launch claude → exec the user's shell so the window stays open.
-  const bodyFor = (shell: string) =>
-    `${cwd ? `cd ${shArg(cwd)} && ` : ""}${inner}\nexec ${shArg(shell)}\n`;
-
-  if (isWindows) {
-    const distro = prefs().wslDistro?.trim() || "Ubuntu";
-    // Open in the user's login shell (zsh/bash/fish/etc). Tools like node/npx are
-    // enabled via mise in that shell's rc (.zshrc etc), so hardcoding bash would
-    // leave MCP's npx and friends missing. Using the login shell reproduces "the
-    // same environment as the user's everyday terminal".
-    const shell = await wslLoginShell(distro);
-    const winTmp = path.join(os.tmpdir(), `raycast-claude-${Date.now()}.sh`);
-    await fs.writeFile(winTmp, bodyFor(shell), { encoding: "utf8" });
-    const wslPath = winToWslPath(winTmp);
-    // <shell> -lic = login + interactive init → .zprofile/.zshrc etc are read and
-    // mise (node/npx) is loaded. We only pass `source <path>`, so there's no ; and
-    // wt doesn't spawn extra tabs.
-    const sourceCmd = `source ${shArg(wslPath)}`;
-    try {
-      await run("wt.exe", [
-        "-w",
-        "0",
-        "wsl.exe",
-        "-d",
-        distro,
-        "--",
-        shell,
-        "-lic",
-        sourceCmd,
-      ]);
-    } catch {
-      await run("wsl.exe", ["-d", distro, "--", shell, "-lic", sourceCmd]);
-    }
-    return;
+  const body = `${cwd ? `cd ${shArg(cwd)} && ` : ""}${inner}\nexec ${shArg(shell)}\n`;
+  const winTmp = path.join(os.tmpdir(), `raycast-claude-${Date.now()}.sh`);
+  await fs.writeFile(winTmp, body, { encoding: "utf8" });
+  const wslPath = winToWslPath(winTmp);
+  // <shell> -lic = login + interactive init → .zprofile/.zshrc etc are read and
+  // mise (node/npx) is loaded. We only pass `source <path>`, so there's no ; and
+  // wt doesn't spawn extra tabs.
+  const sourceCmd = `source ${shArg(wslPath)}`;
+  try {
+    await run("wt.exe", [
+      "-w",
+      "0",
+      "wsl.exe",
+      "-d",
+      distro,
+      "--",
+      shell,
+      "-lic",
+      sourceCmd,
+    ]);
+  } catch {
+    await run("wsl.exe", ["-d", distro, "--", shell, "-lic", sourceCmd]);
   }
+}
 
-  // macOS: use Terminal's `do script` to open in the user's shell.
-  // Terminal starts a login interactive shell by default, so mise and the rest are set up.
+// PowerShell that rebuilds PATH *and* PATHEXT from the persisted machine+user environment.
+// A shell spawned by a GUI app (Raycast) inherits a broken env: PATH can be missing mise
+// and ~/.local/bin (where claude.exe lives), and — crucially — PATHEXT comes through as just
+// ".CPL", so bare `claude`/`mise` don't resolve to their .exe (only `claude.exe` would).
+// Recreating both reproduces what a fresh terminal sees.
+const PS_REFRESH_ENV = [
+  `$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')`,
+  `$pe = [Environment]::GetEnvironmentVariable('PATHEXT','Machine'); if ($pe) { $env:PATHEXT = $pe }`,
+].join("; ");
+
+/**
+ * Windows-native: open PowerShell in a Windows Terminal tab and run claude there.
+ *
+ * We launch with `-NoProfile` and load the profile ourselves *after* fixing PATH —
+ * otherwise the auto-loaded profile runs first with the stale PATH and its `mise activate`
+ * (and anything else) fails. Order: refresh PATH → dot-source the user's profile (so mise /
+ * node / npx for MCP match the everyday terminal) → cd → claude. This is the PowerShell
+ * analogue of the WSL `-lic` login shell.
+ *
+ * We run a temp .ps1 via `-File` (so no `;` reaches wt, which would split it into extra
+ * tabs), with `-NoExit` to keep the window open and `-ExecutionPolicy Bypass` for the temp
+ * script and the (possibly unsigned) profile.
+ */
+async function launchWindowsNative(
+  cwd: string | undefined,
+  extra: string[],
+): Promise<void> {
+  const lines = [
+    PS_REFRESH_ENV,
+    `foreach ($p in $PROFILE.AllUsersAllHosts,$PROFILE.AllUsersCurrentHost,$PROFILE.CurrentUserAllHosts,$PROFILE.CurrentUserCurrentHost) { if ($p -and (Test-Path $p)) { . $p } }`,
+    cwd ? `Set-Location -LiteralPath ${psArg(cwd)}` : "",
+    `& ${psArg(claudeBin())}${extra.length ? " " + extra.map(psArg).join(" ") : ""}`,
+  ].filter(Boolean);
+  const tmp = path.join(os.tmpdir(), `raycast-claude-${Date.now()}.ps1`);
+  await fs.writeFile(tmp, lines.join("\r\n") + "\r\n", { encoding: "utf8" });
+  const shell = winShell();
+  const shellArgs = [
+    "-NoExit",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    tmp,
+  ];
+  try {
+    await run("wt.exe", ["-w", "0", shell, ...shellArgs]);
+  } catch {
+    await run(shell, shellArgs);
+  }
+}
+
+/** macOS: use Terminal's `do script` to open in the user's login shell. */
+async function launchMac(
+  cwd: string | undefined,
+  extra: string[],
+): Promise<void> {
+  const inner = `${claudeBin()}${extra.length ? " " + extra.map(shArg).join(" ") : ""}`;
   const shell = process.env.SHELL || "/bin/zsh";
+  const body = `${cwd ? `cd ${shArg(cwd)} && ` : ""}${inner}\nexec ${shArg(shell)}\n`;
+  // Terminal starts a login interactive shell by default, so mise and the rest are set up.
   const tmp = path.join(os.tmpdir(), `raycast-claude-${Date.now()}.sh`);
-  await fs.writeFile(tmp, bodyFor(shell), { mode: 0o755 });
+  await fs.writeFile(tmp, body, { mode: 0o755 });
   await run("osascript", [
     "-e",
     'tell application "Terminal" to activate',
     "-e",
     `tell application "Terminal" to do script "source ${tmp}"`,
   ]);
+}
+
+/** The Windows PowerShell executable to launch (pwsh 7 by default, or Windows PowerShell 5). */
+function winShell(): string {
+  return prefs().winShell?.trim() === "powershell"
+    ? "powershell.exe"
+    : "pwsh.exe";
 }
 
 /** C:\\Users\\..\\Temp\\x.sh → /mnt/c/Users/../Temp/x.sh (for access from WSL) */
