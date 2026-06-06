@@ -25,6 +25,7 @@ All UI text is in English. The command name (the manifest `name`) and what Enter
 
 > The old `Resume Last` and `Search Sessions` are merged into `list-sessions` (newest first, so the top row is the most recent and pressing Enter to resume it doubles as "resume last"). `CLI Cheatsheet`, the slash-command runner, `Send to Claude Code`, and the usage/quota command were removed.
 > Where launching isn't possible, the command is copied to the clipboard automatically and a Toast tells you.
+> The session detail is recall-first: it shows Claude's auto title, the first prompt, the latest prompt, and the last reply (parsed from the JSONL) so you can tell what a session was about before resuming — the command is kept below as a fallback.
 
 ## Install (environment pinned with mise + pnpm)
 

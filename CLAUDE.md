@@ -22,19 +22,34 @@ src/
   list-sessions.tsx   List/search session history → resume (primary) / copy (fallback)
   open-project.tsx    Pick a recent project → start claude there (new / --continue)
   skills-agents.tsx   Browse/preview ~/.claude/skills and agents (read-only)
+  setup.tsx           Verify the detected .claude stores + claude binary; open preferences
   lib/
-    platform.ts       Path resolution, command building, launchInteractive() — the core
-    sessions.ts       Read & parse the project JSONL into Session[]
+    platform.ts       Store resolution, command building, launchInteractive() — the core
+    sessions.ts       Read & parse the project JSONL into Session[] (each tagged by backend)
 scripts/
   clean.mjs           OS-independent node_modules/lockfile cleanup (pwsh-safe)
   sync-to-windows.sh  rsync WSL → Windows (for dev on the Windows-native Raycast)
+docs/
+  windows-native-claude.md  Notes on the WSL + Windows-native backend design
 mise.toml             Pinned toolchain (node/pnpm) + all build tasks
 ```
 
-`lib/platform.ts` is the heart: `launchInteractive(cwd, extra)` opens the user's real login
-shell (mac: Terminal via `osascript`; Windows: `wt + wsl` with the login shell + `-lic`) so
-the full dev environment (mise → node/npx, needed for MCP servers) is reproduced. It throws on
-failure so callers fall back to copying via `buildCommand()`.
+`lib/platform.ts` is the heart. A session belongs to a **backend** (`native` or `wsl`); on
+Windows the extension auto-detects and reads *both* the Windows-native store
+(`%USERPROFILE%\.claude`, via `os.homedir`) and the WSL store, tagging each session so it
+relaunches in the right place. `launchInteractive(cwd, extra, backend)` opens the matching
+terminal so the user's full dev env is reproduced, then throws on failure so callers fall back
+to copying via `buildCommand()` (also backend-aware):
+
+- mac native → Terminal via `osascript` (login shell).
+- Windows + `wsl` → `wt + wsl` with the login shell + `-lic` (loads mise → node/npx for MCP).
+- Windows + `native` → `wt + PowerShell` running a temp `.ps1` that **rebuilds PATH *and*
+  PATHEXT** from the persisted machine+user environment (a GUI-spawned shell inherits a broken
+  one — PATHEXT arrives as just `.CPL`, so bare `claude` wouldn't resolve) and then dot-sources
+  the user profile (mise activate, node/npx). This is the PowerShell analogue of WSL's `-lic`.
+
+Environment/backend info is only surfaced in the UI when more than one backend exists (e.g. a
+Windows user with both WSL and native sessions); on a single-environment host it's hidden.
 
 ## Conventions
 
@@ -45,7 +60,7 @@ failure so callers fall back to copying via `buildCommand()`.
 - Be careful with quotes in `Action`/label strings — an autocapitalizer can rewrite words on
   `ray lint --fix`; avoid inner double-quotes in titles.
 - **No `menu-bar` commands.** Raycast for Windows doesn't support them, and this extension
-  targets Windows(WSL). Surface resident info as a `view` command instead.
+  targets Windows (both WSL and native). Surface resident info as a `view` command instead.
 - **Self-contained features only.** A user who installs only this extension must get the full
   feature. Don't depend on any external tool or its files (e.g. a third-party statusline).
 
