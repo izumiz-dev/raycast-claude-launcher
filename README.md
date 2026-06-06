@@ -37,7 +37,7 @@ mise run dev            # load into Raycast in dev mode (on macOS / Raycast for 
 Others: `mise run build` / `mise run lint` / `mise run reset` (full reset → rebuild) / `mise run doctor` (environment check).
 
 > The environment is **strictly pinned with mise** (`min_version`, `mise.lock`, exact pins, and `pnpm.overrides` to unify `@types/react` at 19.0.10).
-> Raycast doesn't run on this repo's host (Linux/WSL), so the build is verified by syncing to Windows. `assets/command-icon.png` is a flat placeholder — replace it.
+> Raycast doesn't run on this repo's host (Linux/WSL), so the build is verified by syncing to Windows. `assets/icon.png` is a flat placeholder — replace it.
 
 ## Development (write on WSL, test on Windows)
 
@@ -58,8 +58,8 @@ or `scripts/sync-to-windows.sh <dest>`.)
 
 ```powershell
 # Windows (PowerShell). Install Node on Windows; copy the code via git.
-git clone <repo> C:\dev\raycast-claude-launcher
-cd C:\dev\raycast-claude-launcher
+git clone <repo> C:\Users\user\dev\raycast-claude-launcher
+cd C:\Users\user\dev\raycast-claude-launcher
 npm install     # rebuild the Windows-native node_modules (WSL's can't be reused)
 npm run dev     # = ray develop. A green icon means dev is running.
 ```
@@ -78,7 +78,7 @@ npm run dev     # = ray develop. A green icon means dev is running.
 
 ### Windows (WSL) key points
 - Auth and sessions both live in **`~/.claude` inside WSL**. Run `claude login` inside WSL.
-- Launching uses `wt wsl -d <distro> -- <login-shell> -lic "cd <cwd> && claude ..."` to enter the logged-in session inside WSL.
+- Launching writes a temp script (`cd <cwd> && claude ...`, plus `exec <login-shell>` so the window stays open) and runs `wt -w 0 wsl -d <distro> -- <login-shell> -lic "source <script>"` to enter the logged-in session inside WSL (falls back to plain `wsl` if `wt` is unavailable).
 - A session's `cwd` is a WSL Linux path, so it can be `cd`'d into directly.
 
 ## Recommended setup
