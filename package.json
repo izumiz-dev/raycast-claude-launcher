@@ -1,0 +1,82 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "claude-launcher",
+  "title": "Claude Code Launcher",
+  "description": "Launch and resume Claude Code sessions from Raycast. Opens your real login shell, so your full dev environment (mise, node, npx) is available. Works on macOS and Windows + WSL.",
+  "icon": "icon.png",
+  "author": "you",
+  "license": "MIT",
+  "platforms": ["macOS", "Windows"],
+  "commands": [
+    {
+      "name": "list-sessions",
+      "title": "Resume Claude Code Session",
+      "subtitle": "Claude Code",
+      "description": "Browse your Claude Code session history (newest first) and resume any session in its original directory.",
+      "mode": "view"
+    },
+    {
+      "name": "open-project",
+      "title": "Open Claude Code Project",
+      "subtitle": "Claude Code",
+      "description": "Pick a recent project and start Claude Code in that directory — a new session or continue the last one.",
+      "mode": "view"
+    },
+    {
+      "name": "skills-agents",
+      "title": "Browse Claude Code Skills & Agents",
+      "subtitle": "Claude Code",
+      "description": "Browse and preview the Claude Code skills and agents defined under ~/.claude.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "claudeHome",
+      "title": "Claude Home (.claude)",
+      "description": "Leave empty on macOS to use ~/.claude. On Windows, set the UNC path to .claude inside WSL (e.g. \\\\wsl.localhost\\Ubuntu\\home\\you\\.claude).",
+      "type": "textfield",
+      "required": false
+    },
+    {
+      "name": "claudeBin",
+      "title": "Claude Binary",
+      "description": "Use \"claude\" if it is on your PATH, or provide an absolute path.",
+      "type": "textfield",
+      "required": false,
+      "default": "claude"
+    },
+    {
+      "name": "wslDistro",
+      "title": "WSL Distro",
+      "description": "Windows only. e.g. Ubuntu (check with: wsl -l -q).",
+      "type": "textfield",
+      "required": false,
+      "default": "Ubuntu"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.80.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.0.4",
+    "@types/node": "22.19.17",
+    "@types/react": "19.0.10",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.4.5"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "pnpm": {
+    "overrides": {
+      "@types/node": "22.19.17",
+      "@types/react": "19.0.10"
+    }
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix"
+  }
+}
