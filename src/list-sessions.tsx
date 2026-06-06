@@ -15,8 +15,16 @@ import { loadSessions, Session } from "./lib/sessions";
 /** One-line blockquote (callers pass already-clipped, single-line text). */
 const quote = (s: string) => `> ${s}`;
 
-/** A recall-first detail: what the session was about, where it ended, then the command. */
-function detailMarkdown(s: Session, resumeCmd: string): string {
+/**
+ * A recall-first detail: what the session was about, where it ended, then the command.
+ * `showEnv` adds an Environment line — only meaningful when backends are mixed (e.g. a
+ * Windows user with both WSL and native sessions); on a single-environment host it's noise.
+ */
+function detailMarkdown(
+  s: Session,
+  resumeCmd: string,
+  showEnv: boolean,
+): string {
   const parts = [`### ${s.title}`];
   if (s.firstPrompt)
     parts.push(`**First prompt**\n\n${quote(clip(s.firstPrompt, 300))}`);
@@ -25,8 +33,9 @@ function detailMarkdown(s: Session, resumeCmd: string): string {
   if (s.lastReply)
     parts.push(`**Latest reply**\n\n${quote(clip(s.lastReply, 400))}`);
   parts.push("---");
+  const env = showEnv ? `**Environment** ${backendLabel(s.backend)} • ` : "";
   parts.push(
-    `**Directory** \`${s.cwd}\`\n\n**Environment** ${backendLabel(s.backend)} • **Turns** ${s.turns} • **Session** \`${s.id}\``,
+    `**Directory** \`${s.cwd}\`\n\n${env}**Turns** ${s.turns} • **Session** \`${s.id}\``,
   );
   parts.push(`**Resume**\n\n\`\`\`bash\n${resumeCmd}\n\`\`\``);
   return parts.join("\n\n");
@@ -92,7 +101,9 @@ export default function ListSessions() {
               { date: new Date(s.mtime) },
             ]}
             detail={
-              <List.Item.Detail markdown={detailMarkdown(s, resumeCmd)} />
+              <List.Item.Detail
+                markdown={detailMarkdown(s, resumeCmd, mixed)}
+              />
             }
             actions={
               <ActionPanel>

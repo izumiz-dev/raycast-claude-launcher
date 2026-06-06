@@ -72,11 +72,14 @@ export default function Setup() {
     }
 
     const stores = await claudeStores();
+    // Only qualify rows by environment when there's more than one (e.g. WSL + native);
+    // on a single-environment host the label is just noise.
+    const multi = stores.length > 1;
     for (const store of stores) {
       const projects = await readDirSafe(path.join(store.root, "projects"));
       out.push({
         id: `store-${store.backend}`,
-        title: `${backendLabel(store.backend)} store`,
+        title: multi ? `${backendLabel(store.backend)} store` : "Claude store",
         value: store.root,
         status: projects.length > 0 ? "ok" : "warn",
         hint:
@@ -91,7 +94,9 @@ export default function Setup() {
       const ok = await claudeBinFound(backend);
       out.push({
         id: `bin-${backend}`,
-        title: `Claude Binary (${backendLabel(backend)})`,
+        title: multi
+          ? `Claude Binary (${backendLabel(backend)})`
+          : "Claude Binary",
         value: cfg.claudeBin,
         status: ok ? "ok" : "warn",
         hint: ok
