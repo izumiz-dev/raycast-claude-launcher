@@ -16,7 +16,7 @@ import {
   openExtensionPreferences,
 } from "@raycast/api";
 import {
-  Backend,
+  backendLabel,
   claudeBinFound,
   claudeStores,
   isWindows,
@@ -34,8 +34,6 @@ interface Check {
   status: Status;
   hint: string;
 }
-
-const backendLabel = (b: Backend) => (b === "wsl" ? "WSL" : "Windows/native");
 
 function statusIcon(s: Status) {
   if (s === "ok") return { source: Icon.CheckCircle, tintColor: Color.Green };

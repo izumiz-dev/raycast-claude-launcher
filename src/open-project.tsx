@@ -12,6 +12,7 @@ import {
 } from "@raycast/api";
 import {
   Backend,
+  backendLabel,
   buildCommand,
   claudeStores,
   launchInteractive,
@@ -94,9 +95,7 @@ export default function OpenProject() {
           subtitle={p.cwd}
           keywords={[p.cwd]}
           accessories={[
-            ...(mixed
-              ? [{ tag: p.backend === "wsl" ? "WSL" : "Windows/native" }]
-              : []),
+            ...(mixed ? [{ tag: backendLabel(p.backend) }] : []),
             ...(p.lastUsed ? [{ date: new Date(p.lastUsed) }] : []),
           ]}
           actions={

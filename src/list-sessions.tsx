@@ -9,15 +9,11 @@ import {
   showToast,
   Toast,
 } from "@raycast/api";
-import { buildCommand, launchInteractive } from "./lib/platform";
+import { backendLabel, buildCommand, launchInteractive } from "./lib/platform";
 import { loadSessions, Session } from "./lib/sessions";
 
 /** One-line blockquote (callers pass already-clipped, single-line text). */
 const quote = (s: string) => `> ${s}`;
-
-/** Human label for a session's environment. */
-const backendLabel = (b: Session["backend"]) =>
-  b === "wsl" ? "WSL" : "Windows/native";
 
 /** A recall-first detail: what the session was about, where it ended, then the command. */
 function detailMarkdown(s: Session, resumeCmd: string): string {

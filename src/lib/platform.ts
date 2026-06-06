@@ -41,6 +41,12 @@ export interface Store {
   root: string; // absolute path to a .claude directory
 }
 
+/** Human label for a backend. "native" reads as the host OS (macOS vs Windows/native). */
+export function backendLabel(b: Backend): string {
+  if (b === "wsl") return "WSL";
+  return isMac ? "macOS" : "Windows/native";
+}
+
 let cachedClaudeHome: string | undefined;
 
 /**
