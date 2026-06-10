@@ -34,9 +34,7 @@ function detailMarkdown(
     parts.push(`**Latest reply**\n\n${quote(clip(s.lastReply, 400))}`);
   parts.push("---");
   const env = showEnv ? `**Environment** ${backendLabel(s.backend)} • ` : "";
-  parts.push(
-    `**Directory** \`${s.cwd}\`\n\n${env}**Turns** ${s.turns} • **Session** \`${s.id}\``,
-  );
+  parts.push(`**Directory** \`${s.cwd}\`\n\n${env}**Session** \`${s.id}\``);
   parts.push(`**Resume**\n\n\`\`\`bash\n${resumeCmd}\n\`\`\``);
   return parts.join("\n\n");
 }
