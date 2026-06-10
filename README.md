@@ -92,7 +92,7 @@ mise run dev            # load into Raycast in dev mode (on macOS / Raycast for 
 
 Others: `mise run build` / `mise run lint` / `mise run reset` (full reset → rebuild) / `mise run doctor` (environment check).
 
-> The environment is **strictly pinned with mise** (`min_version`, `mise.lock`, exact pins, and `pnpm.overrides` to unify `@types/react` at 19.0.10).
+> The environment is **strictly pinned with mise** (`min_version`, `mise.lock`, exact pins, and `overrides` in `pnpm-workspace.yaml` to unify `@types/react` at 19.0.10).
 
 ### Developing for Windows
 
@@ -101,13 +101,15 @@ And because of native deps like esbuild, **node_modules is per-OS**. So to test 
 backends, clone the repo on Windows and run dev natively there:
 
 ```powershell
-# Windows (PowerShell). Install Node on Windows; copy the code via git.
+# Windows (PowerShell). Install mise once: winget install jdx.mise
 git clone https://github.com/izumiz-dev/raycast-claude-code-resume C:\Users\user\dev\raycast-claude-code-resume
 cd C:\Users\user\dev\raycast-claude-code-resume
-npm install     # rebuild the Windows-native node_modules (another OS's can't be reused)
-npm run dev     # = ray develop. A green icon means dev is running.
+mise trust          # trust mise.toml on the fresh clone
+mise install        # Node / pnpm pinned by mise.toml + mise.lock (same versions as macOS)
+mise run install    # pnpm install — rebuilds the Windows-native node_modules (another OS's can't be reused)
+mise run dev        # = ray develop. A green icon means dev is running.
 ```
 
 - In Raycast → Preferences → Advanced/Developer, turn **Auto-reload on Save** ON.
-- If hot reload isn't kicking in: after `npm run build`, run `start raycast://extensions/raycast/raycast/reload-extensions`.
+- If hot reload isn't kicking in: after `mise run build`, run `start raycast://extensions/raycast/raycast/reload-extensions`.
 - Windows developer support is in beta — "unfinished but usable in practice". If `ray develop` isn't found, confirm Raycast Windows' Developer features are enabled.

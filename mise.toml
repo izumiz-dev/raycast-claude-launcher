@@ -32,7 +32,7 @@ description = "Resolve dependencies (pnpm install). No quoting, so it works unde
 run = "pnpm install"
 
 [tasks.clean]
-description = "Remove node_modules / lockfiles (OS-independent; scripts/clean.mjs)"
+description = "Remove node_modules (OS-independent; scripts/clean.mjs; keeps pnpm-lock.yaml)"
 run = "node scripts/clean.mjs"
 
 [tasks.build]
@@ -51,10 +51,11 @@ run = "pnpm exec ray lint"
 description = "Full reset → reinstall → build (run in sequence)"
 run = ["node scripts/clean.mjs", "pnpm install", "pnpm exec ray build -e dist"]
 
+# Array form (not a multiline script) so each line also runs under Windows' default cmd /c
 [tasks.doctor]
 description = "Check the environment (node/pnpm/ray versions)"
-run = """
-node -v
-pnpm -v
-pnpm exec ray --version || echo 'ray becomes available after pnpm install'
-"""
+run = [
+  "node -v",
+  "pnpm -v",
+  "pnpm exec ray --version || echo ray becomes available after pnpm install",
+]
