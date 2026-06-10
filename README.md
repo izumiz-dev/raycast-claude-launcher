@@ -12,14 +12,11 @@
 |---|---|
 | **Resume Claude Code Session** | Browse session history (newest first) → resume any session (`claude -r <id>`) in its original directory |
 | **Open Claude Code Project** | Pick a recent project → start a new session or continue the last one |
-| **Check Claude Code Setup** | Verify detected `.claude` stores and the `claude` binary per environment; open preferences to override |
 
 > The session list is newest-first, so pressing Enter on the top row doubles as "resume last".
-> Where launching isn't possible (terminal not found, etc.), the command is copied to the clipboard and a Toast tells you.
+> Where launching isn't possible (terminal not found, etc.), the command is copied to the clipboard and a Toast with an "Open Preferences" action appears.
 
 ![Open Claude Code Project — project list](metadata/claude-code-resume-1.png)
-
-![Check Claude Code Setup — platform, terminal, store, and binary status](metadata/claude-code-resume-3.png)
 
 ## What makes this different
 
@@ -54,7 +51,7 @@ On Windows you may run Claude Code from **WSL** and/or **natively from PowerShel
 - **WSL sessions** — store is `~/.claude` inside WSL. Launch runs `wt + wsl` with a login shell.
 - **Windows-native sessions** — store is `C:\Users\<you>\.claude`. Launch runs `wt + PowerShell` with a temp `.ps1` that rebuilds PATH/PATHEXT from the persisted environment before running `claude`.
 
-Use **Check Claude Code Setup** to see which stores were detected and whether `claude` resolves in each environment.
+If `claude` can't be found, a Toast appears with an **Open Preferences** action to set the binary path.
 
 ## Tips
 

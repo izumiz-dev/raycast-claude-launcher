@@ -21,13 +21,6 @@
 
       "description": "Pick a recent project and start Claude Code in that directory — a new session or continue the last one.",
       "mode": "view"
-    },
-    {
-      "name": "setup",
-      "title": "Check Claude Code Setup",
-
-      "description": "Verify the resolved paths and the claude binary, and open preferences to override them.",
-      "mode": "view"
     }
   ],
   "preferences": [

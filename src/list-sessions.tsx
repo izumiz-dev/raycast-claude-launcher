@@ -6,6 +6,7 @@ import {
   closeMainWindow,
   Icon,
   List,
+  openExtensionPreferences,
   showToast,
   Toast,
 } from "@raycast/api";
@@ -72,6 +73,10 @@ export default function ListSessions() {
         style: Toast.Style.Failure,
         title: "Couldn't launch — command copied to clipboard",
         message: cmd,
+        primaryAction: {
+          title: "Open Preferences",
+          onAction: openExtensionPreferences,
+        },
       });
     }
   }
