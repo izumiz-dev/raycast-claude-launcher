@@ -10,7 +10,12 @@ import {
   showToast,
   Toast,
 } from "@raycast/api";
-import { backendLabel, buildCommand, launchInteractive } from "./lib/platform";
+import {
+  backendLabel,
+  buildCommand,
+  launchInteractive,
+  maybeShowGhosttyTip,
+} from "./lib/platform";
 import { loadSessions, Session } from "./lib/sessions";
 
 /** One-line blockquote (callers pass already-clipped, single-line text). */
@@ -64,7 +69,8 @@ export default function ListSessions() {
   async function resume(s: Session) {
     try {
       await closeMainWindow();
-      await launchInteractive(s.cwd, ["-r", s.id], s.backend); // primary action: jump into the session
+      await launchInteractive(s.cwd, ["-r", s.id], s.backend);
+      await maybeShowGhosttyTip();
     } catch {
       // fall back to copying where we can't launch
       const cmd = buildCommand(["-r", s.id], s.cwd, s.backend);

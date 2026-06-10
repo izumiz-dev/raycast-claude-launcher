@@ -11,7 +11,12 @@ import { execFile } from "child_process";
 import { promises as fs } from "fs";
 import * as os from "os";
 import * as path from "path";
-import { getPreferenceValues } from "@raycast/api";
+import {
+  getPreferenceValues,
+  LocalStorage,
+  showToast,
+  Toast,
+} from "@raycast/api";
 
 interface Prefs {
   claudeHome?: string;
@@ -157,87 +162,24 @@ export async function readDirSafe(dir: string): Promise<string[]> {
   }
 }
 
-/** Resolved, human-readable view of the current configuration (for the Setup command). */
-export async function resolvedConfig(): Promise<{
-  platform: string;
-  claudeHome: string;
-  claudeBin: string;
-  wslDistro?: string;
-  macTerminal?: string;
-}> {
-  return {
-    platform: isWindows ? "Windows (WSL)" : isMac ? "macOS" : "Linux",
-    claudeHome: await claudeHome(),
-    claudeBin: claudeBin(),
-    wslDistro: isWindows ? prefs().wslDistro?.trim() || "Ubuntu" : undefined,
-    macTerminal: isMac ? macTerminal() : undefined,
-  };
-}
+const GHOSTTY_TIP_KEY = "ghosttyTipShown";
 
 /**
- * Check that the claude binary resolves in the user's login shell — i.e. the exact
- * environment launchInteractive() runs in (login + interactive, so mise is loaded).
- * Only used to surface a hint in the Setup view: a false negative is harmless because
- * launchInteractive() runs `claude` directly, never `command -v` (e.g. fish doesn't
- * support `command -v` the POSIX way, so it may report not-found even when claude works).
+ * Show a one-time Toast when the user has Ghostty selected as their terminal.
+ * Ghostty has no AppleScript interface, so every launch opens a separate app instance.
+ * `quit-after-last-window-closed = true` in the Ghostty config keeps things tidy.
  */
-export async function claudeBinFound(
-  backend: Backend = "native",
-): Promise<boolean> {
-  try {
-    if (isWindows && backend === "native") {
-      // Refresh PATH/PATHEXT (a GUI-spawned shell inherits a broken env), then resolve
-      // via Get-Command (honours PATH and absolute paths alike).
-      const out = await runCapture(winShell(), [
-        "-NoProfile",
-        "-Command",
-        `${PS_REFRESH_ENV}; if (Get-Command ${psArg(claudeBin())} -ErrorAction SilentlyContinue) { 'ok' }`,
-      ]);
-      return out.includes("ok");
-    }
-    const cmd = `command -v ${shArg(claudeBin())}`;
-    if (isWindows) {
-      const distro = prefs().wslDistro?.trim() || "Ubuntu";
-      const shell = await wslLoginShell(distro);
-      const out = await runCapture("wsl.exe", [
-        "-d",
-        distro,
-        "--",
-        shell,
-        "-lic",
-        cmd,
-      ]);
-      return out.trim().length > 0;
-    }
-    const shell = process.env.SHELL || "/bin/zsh";
-    const out = await runCapture(shell, ["-lic", cmd]);
-    return out.trim().length > 0;
-  } catch {
-    return false;
-  }
-}
-
-/** Windows: check the configured WSL distro exists (always true off Windows). */
-export async function wslDistroExists(): Promise<boolean> {
-  if (!isWindows) return true;
-  const distro = prefs().wslDistro?.trim() || "Ubuntu";
-  try {
-    // `wsl -l -q` prints one distro per line, but as UTF-16: read as a utf8
-    // string each char is interleaved with non-printable bytes — strip them.
-    const out = await runCapture("wsl.exe", ["-l", "-q"]);
-    const names = out
-      .split(/\r?\n/)
-      .map((s) =>
-        s
-          .replace(/[^\x20-\x7E]/g, "")
-          .trim()
-          .toLowerCase(),
-      )
-      .filter(Boolean);
-    return names.includes(distro.toLowerCase());
-  } catch {
-    return false;
-  }
+export async function maybeShowGhosttyTip(): Promise<void> {
+  if (!isMac || macTerminal() !== "ghostty") return;
+  const already = await LocalStorage.getItem<string>(GHOSTTY_TIP_KEY);
+  if (already) return;
+  await LocalStorage.setItem(GHOSTTY_TIP_KEY, "1");
+  await showToast({
+    style: Toast.Style.Success,
+    title: "Ghostty tip",
+    message:
+      "Each session opens as a separate Ghostty instance. Add `quit-after-last-window-closed = true` to ~/.config/ghostty/config to auto-close finished windows.",
+  });
 }
 
 function run(file: string, args: string[]): Promise<void> {
