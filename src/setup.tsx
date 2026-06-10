@@ -64,12 +64,20 @@ export default function Setup() {
         iterm: "iTerm2",
         ghostty: "Ghostty",
       };
+      // Ghostty has no AppleScript interface, so every launch is a separate app
+      // instance (`open -n`) — surface that as expected behavior, not a bug.
+      const ghosttyNote =
+        cfg.macTerminal === "ghostty"
+          ? "\n\nKnown behavior with Ghostty: each session opens as a separate app instance, so the Dock shows one Ghostty icon per session. Closing a window can leave an empty instance behind — add `quit-after-last-window-closed = true` to your Ghostty config to make finished instances quit themselves."
+          : "";
       out.push({
         id: "macTerminal",
         title: "Terminal",
         value: labels[cfg.macTerminal] ?? cfg.macTerminal,
         status: "info",
-        hint: "The terminal app interactive sessions launch in. Change it in preferences.",
+        hint:
+          "The terminal app interactive sessions launch in. Change it in preferences." +
+          ghosttyNote,
       });
     }
 
