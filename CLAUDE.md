@@ -40,8 +40,9 @@ terminal so the user's full dev env is reproduced, then throws on failure so cal
 to copying via `buildCommand()` (also backend-aware):
 
 - mac native → the terminal picked in preferences (`macTerminal`): Terminal.app or iTerm2
-  via `osascript`, or Ghostty via `open -na Ghostty --args --command=...`. All open a login
-  shell. Default is Terminal.app.
+  via `osascript`, or Ghostty via `open -na Ghostty --args -e ...` (`-e` = `initial-command`,
+  first surface only — never `--command=`, which re-runs claude in every new tab). All open a
+  login shell. Default is Terminal.app.
 - Windows + `wsl` → `wt + wsl` with the login shell + `-lic` (loads mise → node/npx for MCP).
 - Windows + `native` → `wt + PowerShell` running a temp `.ps1` that **rebuilds PATH *and*
   PATHEXT** from the persisted machine+user environment (a GUI-spawned shell inherits a broken

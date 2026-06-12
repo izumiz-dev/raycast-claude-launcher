@@ -11,12 +11,7 @@ import { execFile } from "child_process";
 import { promises as fs } from "fs";
 import * as os from "os";
 import * as path from "path";
-import {
-  getPreferenceValues,
-  LocalStorage,
-  showToast,
-  Toast,
-} from "@raycast/api";
+import { getPreferenceValues } from "@raycast/api";
 
 interface Prefs {
   claudeHome?: string;
@@ -160,26 +155,6 @@ export async function readDirSafe(dir: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
-
-const GHOSTTY_TIP_KEY = "ghosttyTipShown";
-
-/**
- * Show a one-time Toast when the user has Ghostty selected as their terminal.
- * Ghostty has no AppleScript interface, so every launch opens a separate app instance.
- * `quit-after-last-window-closed = true` in the Ghostty config keeps things tidy.
- */
-export async function maybeShowGhosttyTip(): Promise<void> {
-  if (!isMac || macTerminal() !== "ghostty") return;
-  const already = await LocalStorage.getItem<string>(GHOSTTY_TIP_KEY);
-  if (already) return;
-  await LocalStorage.setItem(GHOSTTY_TIP_KEY, "1");
-  await showToast({
-    style: Toast.Style.Success,
-    title: "Ghostty tip",
-    message:
-      "Each session opens as a separate Ghostty instance. Add `quit-after-last-window-closed = true` to ~/.config/ghostty/config to auto-close finished windows.",
-  });
 }
 
 function run(file: string, args: string[]): Promise<void> {
@@ -370,15 +345,23 @@ async function launchMacIterm(tmp: string): Promise<void> {
 
 /**
  * Ghostty: no AppleScript dictionary, so drive it via `open`. `-n` forces a new instance
- * so we always get a fresh window; `--args` passes Ghostty CLI flags. `--command` runs our
- * login shell sourcing the temp script (the shell's `exec` at the end keeps the window open).
+ * so we always get a fresh window; `--args` passes Ghostty CLI flags. `-e` sets
+ * `initial-command`, which applies to the *first* surface only — unlike `--command=`,
+ * which is the instance-wide `command` config and would re-run claude in every new tab
+ * (and in any window macOS restores into the instance). `-e` also auto-enables
+ * `quit-after-last-window-closed`, so the spare instance exits once the session ends.
  */
 async function launchMacGhostty(tmp: string, shell: string): Promise<void> {
+  // -e takes an argv (run directly, no /bin/sh wrap since Ghostty 1.2), so pass the
+  // login shell and its -c body as separate arguments.
   await run("open", [
     "-na",
     "Ghostty",
     "--args",
-    `--command=${shell} -c 'source ${tmp}'`,
+    "-e",
+    shell,
+    "-c",
+    `source ${tmp}`,
   ]);
 }
 
