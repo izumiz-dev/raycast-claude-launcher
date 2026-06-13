@@ -42,7 +42,7 @@
 | WSL Distro | — | e.g. `Ubuntu` (check with `wsl -l -q`) |
 | Windows Shell | — | `pwsh` (default) or `powershell` |
 
-> **Ghostty (known behavior):** Ghostty has no AppleScript interface, so each session opens as a separate app instance — one Dock icon per session. Add `quit-after-last-window-closed = true` to your Ghostty config (`~/.config/ghostty/config`) so finished instances clean themselves up.
+> **Ghostty (known behavior):** Ghostty has no AppleScript interface, so each session opens as a separate app instance — one Dock icon per session. The instance quits on its own when the session's window closes, and new tabs you open inside it are normal shells.
 
 ### Windows: two backends, auto-detected
 

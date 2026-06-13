@@ -17,7 +17,6 @@ import {
   buildCommand,
   claudeStores,
   launchInteractive,
-  maybeShowGhosttyTip,
   readDirSafe,
 } from "./lib/platform";
 import { decodeProjectDir, loadSessions } from "./lib/sessions";
@@ -72,7 +71,6 @@ export default function OpenProject() {
     try {
       await closeMainWindow();
       await launchInteractive(p.cwd, extra, p.backend);
-      await maybeShowGhosttyTip();
     } catch {
       const cmd = buildCommand(extra, p.cwd, p.backend);
       await Clipboard.copy(cmd);
