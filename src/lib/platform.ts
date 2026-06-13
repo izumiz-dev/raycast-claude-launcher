@@ -13,19 +13,13 @@ import * as os from "os";
 import * as path from "path";
 import { getPreferenceValues } from "@raycast/api";
 
-interface Prefs {
-  claudeHome?: string;
-  claudeBin?: string;
-  wslDistro?: string;
-  winShell?: string;
-  macTerminal?: string;
-}
-
 export const isWindows = process.platform === "win32";
 export const isMac = process.platform === "darwin";
 
-export function prefs(): Prefs {
-  return getPreferenceValues<Prefs>();
+// Preference types are auto-generated from package.json into raycast-env.d.ts
+// (the global `Preferences` type), so a hand-written interface can't drift out of sync.
+export function prefs(): Preferences {
+  return getPreferenceValues<Preferences>();
 }
 
 /**
